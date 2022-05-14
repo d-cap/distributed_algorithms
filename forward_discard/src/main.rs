@@ -1,11 +1,16 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicUsize;
 use std::thread::{self, JoinHandle};
+
+static THREAD_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 use crossbeam::channel::{self, Receiver, Sender};
 
 struct Node<T> {
     id: usize,
     announced: bool,
+    finished: bool,
+    nodes: usize,
     map: BTreeMap<usize, u32>,
     tx_left: Sender<T>,
     rx_left: Receiver<T>,
@@ -31,25 +36,49 @@ impl From<Vec<Node<(usize, u32)>>> for Ring {
             nodes: nodes
                 .into_iter()
                 .map(|mut n| {
-                    thread::spawn(move || loop {
-                        if !n.announced {
-                            n.announced = true;
-                            while n.tx_left.send((n.id, 1)).is_err() {}
-                            while n.tx_right.send((n.id, 1)).is_err() {}
-                        }
-
-                        if let Ok((id, v)) = n.rx_left.try_recv() {
-                            println!("Map: {}, {:?}", n.id, n.map);
-                            if id != n.id && n.map.get(&id).is_none() {
-                                n.map.insert(id, v);
-                                while n.tx_right.send((id, v + 1)).is_err() {}
+                    thread::spawn(move || {
+                        loop {
+                            if !n.announced {
+                                n.announced = true;
+                                while n.tx_left.send((n.id, 1)).is_err() {}
+                                while n.tx_right.send((n.id, 1)).is_err() {}
+                            } else if n.nodes == n.map.len() && !n.finished {
+                                THREAD_COUNT.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                                n.finished = true;
                             }
-                        }
-                        if let Ok((id, v)) = n.rx_right.try_recv() {
-                            println!("Map: {}, {:?}", n.id, n.map);
-                            if id != n.id && n.map.get(&id).is_none() {
-                                n.map.insert(id, v);
-                                while n.tx_left.send((id, v + 1)).is_err() {}
+
+                            if n.finished {
+                                let threads =
+                                    THREAD_COUNT.load(std::sync::atomic::Ordering::Acquire);
+                                if threads == n.nodes + 1 {
+                                    println!("Map: {}, {:?}", n.id, n.map);
+                                    break;
+                                }
+                            }
+
+                            if let Ok((id, v)) = n.rx_left.try_recv() {
+                                if id != n.id && n.map.get(&id).is_none() {
+                                    n.map.insert(id, v);
+                                    let mut count = 0;
+                                    while n.tx_right.send((id, v + 1)).is_err() {
+                                        count += 1;
+                                        if count > 100 {
+                                            // break;
+                                        }
+                                    }
+                                }
+                            }
+                            if let Ok((id, v)) = n.rx_right.try_recv() {
+                                if id != n.id && n.map.get(&id).is_none() {
+                                    n.map.insert(id, v);
+                                    let mut count = 0;
+                                    while n.tx_left.send((id, v + 1)).is_err() {
+                                        count += 1;
+                                        if count > 100 {
+                                            // break;
+                                        }
+                                    }
+                                }
                             }
                         }
                     })
@@ -88,6 +117,8 @@ fn main() {
         nodes.push(Node {
             id: i,
             announced: false,
+            finished: false,
+            nodes: size - 1,
             map: BTreeMap::new(),
             tx_left,
             rx_left,
