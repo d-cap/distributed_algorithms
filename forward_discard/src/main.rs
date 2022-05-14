@@ -34,44 +34,22 @@ impl From<Vec<Node<(usize, u32)>>> for Ring {
                     thread::spawn(move || loop {
                         if !n.announced {
                             n.announced = true;
-                            while let Err(_) = n.tx_left.send((n.id, 1)) {}
-                            while let Err(_) = n.tx_right.send((n.id, 1)) {}
+                            while n.tx_left.send((n.id, 1)).is_err() {}
+                            while n.tx_right.send((n.id, 1)).is_err() {}
                         }
 
                         if let Ok((id, v)) = n.rx_left.try_recv() {
-                            println!(
-                                "Try: {}, {} -> {} ({}, {})",
-                                id,
-                                v,
-                                n.id,
-                                id != n.id,
-                                n.map.get(&id).is_none()
-                            );
+                            println!("Map: {}, {:?}", n.id, n.map);
                             if id != n.id && n.map.get(&id).is_none() {
                                 n.map.insert(id, v);
-                                println!("Insert: {}, {} -> {}", id, v, n.id);
-                                println!("{}, {:?}", n.id, n.map);
-                                while let Err(_) = n.tx_right.send((id, v + 1)) {}
-                            } else {
-                                println!("Discard: {} -> {}, {}", n.id, id, v);
+                                while n.tx_right.send((id, v + 1)).is_err() {}
                             }
                         }
                         if let Ok((id, v)) = n.rx_right.try_recv() {
-                            println!(
-                                "Try: {}, {} -> {} ({}, {})",
-                                id,
-                                v,
-                                n.id,
-                                id != n.id,
-                                n.map.get(&id).is_none()
-                            );
+                            println!("Map: {}, {:?}", n.id, n.map);
                             if id != n.id && n.map.get(&id).is_none() {
                                 n.map.insert(id, v);
-                                println!("Insert: {}, {} -> {}", id, v, n.id);
-                                println!("{}, {:?}", n.id, n.map);
-                                while let Err(_) = n.tx_left.send((id, v + 1)) {}
-                            } else {
-                                println!("Discard: {} -> {}, {}", n.id, id, v);
+                                while n.tx_left.send((id, v + 1)).is_err() {}
                             }
                         }
                     })
@@ -85,14 +63,28 @@ fn main() {
     let size = 10;
     let mut nodes: Vec<Node<(usize, u32)>> = Vec::with_capacity(size);
 
-    let (junction_tx_left, junction_rx_right) = crossbeam::channel::unbounded();
-    let (junction_tx_right, junction_rx_left) = crossbeam::channel::unbounded();
-    let mut previous_right_tx = junction_tx_right;
-    let mut previous_right_rx = junction_rx_right;
+    let (junction_first_node_tx, junction_last_node_rx) = crossbeam::channel::unbounded();
+    let (junction_last_node_tx, junction_first_node_rx) = crossbeam::channel::unbounded();
+    let mut previous_right_tx = junction_first_node_tx.clone();
+    let mut previous_right_rx = junction_first_node_rx.clone();
 
     for i in 0..size {
-        let (tx_left, rx_right) = channel::unbounded();
-        let (tx_right, rx_left) = channel::unbounded();
+        let (tx_left, rx_right) = if i == size - 1 {
+            (
+                junction_last_node_tx.clone(),
+                junction_first_node_rx.clone(),
+            )
+        } else {
+            channel::unbounded()
+        };
+        let (tx_right, rx_left) = if i == size - 1 {
+            (
+                junction_first_node_tx.clone(),
+                junction_last_node_rx.clone(),
+            )
+        } else {
+            channel::unbounded()
+        };
         nodes.push(Node {
             id: i,
             announced: false,
@@ -103,13 +95,8 @@ fn main() {
             rx_right: previous_right_rx,
         });
 
-        if i + 1 == size - 1 {
-            previous_right_tx = junction_tx_left.clone();
-            previous_right_rx = junction_rx_left.clone();
-        } else {
-            previous_right_tx = tx_right;
-            previous_right_rx = rx_right;
-        }
+        previous_right_tx = tx_right;
+        previous_right_rx = rx_right;
     }
 
     let ring: Ring = nodes.into();
