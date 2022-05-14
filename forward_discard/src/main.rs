@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::thread::{self, JoinHandle};
 
 use crossbeam::channel::{self, Receiver, Sender};
@@ -6,7 +6,7 @@ use crossbeam::channel::{self, Receiver, Sender};
 struct Node<T> {
     id: usize,
     announced: bool,
-    map: HashMap<usize, u32>,
+    map: BTreeMap<usize, u32>,
     tx_left: Sender<T>,
     rx_left: Receiver<T>,
     tx_right: Sender<T>,
@@ -36,22 +36,42 @@ impl From<Vec<Node<(usize, u32)>>> for Ring {
                             n.announced = true;
                             while let Err(_) = n.tx_left.send((n.id, 1)) {}
                             while let Err(_) = n.tx_right.send((n.id, 1)) {}
-                        } else {
-                            println!("{}, {:?}", n.id, n.map);
                         }
 
                         if let Ok((id, v)) = n.rx_left.try_recv() {
+                            println!(
+                                "Try: {}, {} -> {} ({}, {})",
+                                id,
+                                v,
+                                n.id,
+                                id != n.id,
+                                n.map.get(&id).is_none()
+                            );
                             if id != n.id && n.map.get(&id).is_none() {
                                 n.map.insert(id, v);
-                                while let Err(_) = n.tx_left.send((id, v + 1)) {}
-                                println!("Left: {}, {}", id, v);
+                                println!("Insert: {}, {} -> {}", id, v, n.id);
+                                println!("{}, {:?}", n.id, n.map);
+                                while let Err(_) = n.tx_right.send((id, v + 1)) {}
+                            } else {
+                                println!("Discard: {} -> {}, {}", n.id, id, v);
                             }
                         }
                         if let Ok((id, v)) = n.rx_right.try_recv() {
+                            println!(
+                                "Try: {}, {} -> {} ({}, {})",
+                                id,
+                                v,
+                                n.id,
+                                id != n.id,
+                                n.map.get(&id).is_none()
+                            );
                             if id != n.id && n.map.get(&id).is_none() {
                                 n.map.insert(id, v);
-                                while let Err(_) = n.tx_right.send((id, v + 1)) {}
-                                println!("Right: {}, {}", id, v);
+                                println!("Insert: {}, {} -> {}", id, v, n.id);
+                                println!("{}, {:?}", n.id, n.map);
+                                while let Err(_) = n.tx_left.send((id, v + 1)) {}
+                            } else {
+                                println!("Discard: {} -> {}, {}", n.id, id, v);
                             }
                         }
                     })
@@ -76,7 +96,7 @@ fn main() {
         nodes.push(Node {
             id: i,
             announced: false,
-            map: HashMap::with_capacity(size),
+            map: BTreeMap::new(),
             tx_left,
             rx_left,
             tx_right: previous_right_tx,
