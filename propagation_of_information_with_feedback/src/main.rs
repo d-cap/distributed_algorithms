@@ -14,7 +14,7 @@ impl AdjacencyMatrix {
             }
         } else {
             Self {
-                array: vec![],
+                array: Vec::with_capacity(0),
                 dimension: size,
             }
         }
@@ -77,11 +77,21 @@ impl AdjacencyMatrix {
 
     fn connect(&mut self, row_index: usize, column_index: usize) -> usize {
         let index = self.calculate_index(row_index, column_index);
-        let len = self.array.len();
-        if index >= len {
-            self.array.reserve(len + 1);
-            self.dimension += // Needs to be calculated;
+        let dimension = row_index.max(column_index);
+        let new_capacity = (0..=dimension).sum();
+        if index >= self.array.capacity() {
+            self.array.reserve(new_capacity - self.array.capacity());
+            self.dimension += dimension;
+            while self.array.len() < new_capacity {
+                self.array.push(false);
+            }
         }
+        println!(
+            "{} {}: {:?}",
+            self.array.capacity(),
+            self.array.len(),
+            self.array
+        );
         self.array[index] = true;
         index
     }
@@ -132,4 +142,19 @@ fn main() {
     let connection_1 = graph.connect(node_1, node_2);
     let connection_1 = graph.connect(node_1, node_2);
     println!("Graph: {:#?}", graph);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should() {
+        let a = AdjacencyMatrix::with_dimension(5);
+        assert_eq!(a.calculate_index(0, 0), 0);
+        assert_eq!(a.calculate_index(0, 1), 0);
+        assert_eq!(a.calculate_index(1, 1), 0);
+        assert_eq!(a.calculate_index(2, 1), 0);
+        assert_eq!(a.calculate_index(1, 2), 0);
+    }
 }
