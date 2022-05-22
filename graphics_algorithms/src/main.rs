@@ -9,47 +9,38 @@ fn main() {
         .add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_startup_system(setup)
-        .add_system(mouse_position_system)
-        .add_system(mouse_click_system)
         .run();
 }
 
-#[derive(Component, Debug)]
-struct CursorPosition(Vec2);
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // set up the camera
+    let mut camera = OrthographicCameraBundle::new_3d();
+    camera.orthographic_projection.scale = 3.0;
+    camera.transform = Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y);
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn().insert(CursorPosition(Vec2::ZERO));
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-    commands.spawn_bundle(SpriteBundle {
-        texture: asset_server.load("red_dragon.png"),
+    // camera
+    commands.spawn_bundle(camera);
+
+    // plane
+    commands.spawn_bundle(PbrBundle {
+        mesh: meshes.add(Mesh::from(shape::Plane { size: 5.0 })),
+        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
         ..default()
     });
-}
-
-fn mouse_click_system(
-    mut commands: Commands,
-    mouse: Res<Input<MouseButton>>,
-    asset_server: Res<AssetServer>,
-    query: Query<&CursorPosition>,
-) {
-    if mouse.just_released(MouseButton::Left) {
-        for c in query.iter() {
-            commands.spawn_bundle(SpriteBundle {
-                texture: asset_server.load("red_dragon.png"),
-                transform: Transform::from_xyz(c.0.x, c.0.y, 0.),
-                ..default()
-            });
-        }
-    }
-}
-
-fn mouse_position_system(
-    mut cursor_moved_events: EventReader<CursorMoved>,
-    mut query: Query<&mut CursorPosition>,
-) {
-    for m in cursor_moved_events.iter() {
-        for mut c in query.iter_mut() {
-            *c.0 = *m.position;
-        }
-    }
+    // cubes
+    commands.spawn_bundle(PbrBundle {
+        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+        material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
+        transform: Transform::from_xyz(1.5, 0.5, 1.5),
+        ..default()
+    });
+    // light
+    commands.spawn_bundle(PointLightBundle {
+        transform: Transform::from_xyz(3.0, 8.0, 5.0),
+        ..default()
+    });
 }
