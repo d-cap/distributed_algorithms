@@ -10,7 +10,9 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        .insert_resource(ClearColor(Color::rgb(0.6, 0.6, 0.6)))
         .add_startup_system(setup)
+        .add_system(color_variation)
         .run();
 }
 
@@ -40,22 +42,31 @@ fn setup(
     // cubes
     for i in 0..N {
         let v = i as f32 * (std::f32::consts::PI * 2.) / N as f32;
-        commands.spawn_bundle(PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Cube { size: 0.8 })),
+        let size = 0.6;
+        let bundle = PbrBundle {
+            mesh: meshes.add(Mesh::from(shape::Cube { size })),
             material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-            transform: Transform::from_xyz(radius * v.cos(), 0.4, radius * v.sin()),
+            transform: Transform::from_xyz(radius * v.cos(), size / 2., radius * v.sin()),
             ..default()
-        });
+        };
+        commands.spawn_bundle(bundle);
     }
     // light
     commands.spawn_bundle(PointLightBundle {
         transform: Transform::from_xyz(3.0, 8.0, 5.0),
+        point_light: PointLight {
+            intensity: 1600.0, // lumens - roughly a 100W non-halogen incandescent bulb
+            color: Color::WHITE,
+            shadows_enabled: true,
+            ..default()
+        },
         ..default()
     });
 }
 
-// fn rotator_system(time: Res<Time>, mut query: Query<&mut PbrBundle, With<Cube>>) {
-//     for mut transform in query.iter_mut() {
-//         transform.rotation *= Quat::from_rotation_x(3.0 * time.delta_seconds());
-//     }
-// }
+fn color_variation(time: Res<Time>, mut query: Query<&mut Handle<StandardMaterial>, With<Cube>>) {
+    for mut material in query.iter_mut() {
+        println!("{:#?}", material);
+        // material. *= Quat::from_rotation_x(3.0 * time.delta_seconds());
+    }
+}
