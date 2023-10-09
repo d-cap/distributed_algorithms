@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::sync::{Arc, RwLock};
 
 use rand::Rng;
 
