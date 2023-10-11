@@ -1,5 +1,5 @@
 [package]
-name = "paxos_consensus"
+name = "log_server"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.4.0"
+lazy_static = "1.4.0"
