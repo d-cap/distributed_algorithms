@@ -1,9 +1,8 @@
-#[macro_use]
-extern crate lazy_static;
-
 use std::{sync::Mutex, time::Instant};
 
 use actix_web::{error, post, web, App, Error, HttpResponse, HttpServer};
+
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref LOGS: Mutex<Vec<(Instant, String)>> = Mutex::new(Vec::new());

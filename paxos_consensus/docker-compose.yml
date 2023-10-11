@@ -5,14 +5,33 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
-  consensus-1:
+  consensus-proposer-1:
     build:
       context: ./paxos_server
       dockerfile: Dockerfile
     ports:
       - "8081:8080"
     environment:
-      - PAXOS_ROLES=proposer
+      - PAXOS_ROLE=proposer
       - LOG_SERVER=http://log-server:8080/log
-    links:
-      - log-server
+      - OTHER_NODES=http://consensus-proposer-2:8082,http://consensus-acceptor-1:8083
+  consensus-proposer-2:
+    build:
+      context: ./paxos_server
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      - PAXOS_ROLE=proposer
+      - LOG_SERVER=http://log-server:8080/log
+      - OTHER_NODES=http://consensus-proposer-1:8081,http://consensus-acceptor-1:8083
+  consensus-acceptor-1:
+    build:
+      context: ./paxos_server
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8080"
+    environment:
+      - PAXOS_ROLE=acceptor
+      - LOG_SERVER=http://log-server:8080/log
+      - OTHER_NODES=http://consensus-proposer-1:8081,http://consensus-proposer-2:8082
