@@ -7,14 +7,14 @@ use std::{
 };
 
 use actix_web::{
-    get, post,
+    post,
     web::{self, Buf},
     App, Error, HttpResponse, HttpServer,
 };
 use futures::future::join_all;
 use futures_util::StreamExt as _;
 use lazy_static::lazy_static;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
@@ -80,7 +80,23 @@ async fn consensus_start(mut value: web::Payload) -> Result<HttpResponse, Error>
             })
             .collect::<Vec<_>>()
     });
-    let promises = proposes.map(|proposes| async { join_all(proposes).await });
+    let promises = if let Ok(proposes) = proposes {
+        join_all(proposes).await
+    } else {
+        vec![]
+    };
+    for response in promises {
+        match response {
+            Ok(v) => {
+                if v.status() == StatusCode::OK {
+                    log("Promises sent", &proposal_id.to_string()).await;
+                } else {
+                    log("Promises sent with errors", &v.status().to_string()).await;
+                }
+            }
+            Err(e) => log("Error", &e.to_string()).await,
+        }
+    }
     Ok(HttpResponse::Ok().body(format!("Value {value} accepted!")))
 }
 
@@ -164,10 +180,17 @@ async fn main() -> std::io::Result<()> {
     }
 
     println!("Starting server...");
-    HttpServer::new(|| App::new().service(consensus_start))
-        .bind(("0.0.0.0", 8080))?
-        .run()
-        .await
+    HttpServer::new(|| {
+        App::new()
+            .service(consensus_start)
+            .service(propose)
+            .service(accept)
+            .service(accepted)
+    })
+    .bind(("0.0.0.0", 8080))?
+    .workers(3)
+    .run()
+    .await
 }
 
 async fn log(message: &str, value: &str) {
@@ -179,19 +202,17 @@ async fn log(message: &str, value: &str) {
     match CLIENT
         .post(log_server)
         .body(format!(
-            "{}, for node: {:?}, for value: {}",
+            "{}, for node: {}, for value: {}",
             message,
-            gethostname::gethostname(),
+            gethostname::gethostname().to_str().unwrap(),
             value
         ))
         .send()
         .await
     {
         Ok(response) => {
-            if response.status() == reqwest::StatusCode::OK {
-                println!("message logged");
-            } else {
-                println!("message not logged: {}", response.status());
+            if response.status() != reqwest::StatusCode::OK {
+                println!("Error sending log message: {}", response.status());
             }
         }
         Err(e) => {
@@ -212,7 +233,14 @@ mod tests {
 
     #[actix_web::test]
     async fn should_start_consensus_process() {
-        let app = test::init_service(App::new().service(consensus_start)).await;
+        let app = test::init_service(
+            App::new()
+                .service(consensus_start)
+                .service(propose)
+                .service(accept)
+                .service(accepted),
+        )
+        .await;
         let req = test::TestRequest::post()
             .uri("/consensus")
             .set_payload("this is a value")
