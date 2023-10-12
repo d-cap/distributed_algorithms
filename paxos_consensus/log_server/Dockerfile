@@ -7,10 +7,10 @@ COPY . /app/log
 #RUN cargo test
 RUN cargo build --release
 
-#FROM gcr.io/distroless/cc
-FROM rust:bookworm
-RUN apt-get update -y
-RUN apt-get install -y iputils-ping
+FROM gcr.io/distroless/cc-debian12
+#FROM rust:bookworm
+#RUN apt-get update -y
+#RUN apt-get install -y iputils-ping
 
 WORKDIR app
 

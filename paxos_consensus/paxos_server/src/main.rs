@@ -1,16 +1,25 @@
-use std::{io::ErrorKind, sync::RwLock};
+use std::{
+    io::ErrorKind,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        RwLock,
+    },
+};
 
 use actix_web::{
     get, post,
     web::{self, Buf},
     App, Error, HttpResponse, HttpServer,
 };
+use futures::future::join_all;
 use futures_util::StreamExt as _;
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
+    static ref NODE_ID: AtomicU64 = AtomicU64::new(0);
+    static ref PROPOSAL_COUNT: AtomicU64 = AtomicU64::new(0);
     static ref LOG_SERVER: RwLock<String> = RwLock::new("invalid-server".to_owned());
     static ref NODE_ROLE: RwLock<Role> = RwLock::new(Role::Learner);
     static ref PROPOSING_VALUE: RwLock<String> = RwLock::new("".to_owned());
@@ -51,15 +60,27 @@ impl TryFrom<String> for Role {
     }
 }
 
-#[get("/consensus")]
+#[post("/consensus")]
 async fn consensus_start(mut value: web::Payload) -> Result<HttpResponse, Error> {
-    println!("Consensus message start");
     let mut bytes = web::BytesMut::new();
     while let Some(item) = value.next().await {
         bytes.extend_from_slice(&item?);
     }
     let value = bytes.escape_ascii().to_string();
     log("Consensus started", &value).await;
+    let proposal_id = get_next_id();
+    let proposes = PAXOS_NODES.read().map(|paxos_nodes| {
+        paxos_nodes
+            .iter()
+            .map(|n| {
+                CLIENT
+                    .post(format!("{}/propose", n))
+                    .body(proposal_id.to_string())
+                    .send()
+            })
+            .collect::<Vec<_>>()
+    });
+    let promises = proposes.map(|proposes| async { join_all(proposes).await });
     Ok(HttpResponse::Ok().body(format!("Value {value} accepted!")))
 }
 
@@ -108,13 +129,28 @@ async fn accepted(mut value: web::Payload) -> Result<HttpResponse, Error> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let log_server = std::env::var("LOG_SERVER").expect("Log server not set");
-    println!("Log server used: {}", log_server);
-    let role: Role = std::env::var("PAXOS_ROLE")
+    let node_id_value = std::env::var("NODE_ID").expect("Node id not set");
+    NODE_ID.store(
+        node_id_value
+            .parse::<u64>()
+            .expect("Node id should be a number"),
+        Ordering::Release,
+    );
+    let log_server_value = std::env::var("LOG_SERVER").expect("Log server not set");
+    println!("Log server used: {}", log_server_value);
+    if let Ok(mut log_server) = LOG_SERVER.write() {
+        *log_server = log_server_value;
+    } else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "internal error",
+        ));
+    }
+    let node_role_value: Role = std::env::var("PAXOS_ROLE")
         .expect("Paxos roles not set")
         .try_into()?;
     if let Ok(mut node_role) = NODE_ROLE.write() {
-        *node_role = role;
+        *node_role = node_role_value;
     } else {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -164,9 +200,13 @@ async fn log(message: &str, value: &str) {
     }
 }
 
+fn get_next_id() -> u64 {
+    PROPOSAL_COUNT.fetch_add(1, Ordering::Release) * 10 + NODE_ID.load(Ordering::Acquire)
+}
+
 #[cfg(test)]
 mod tests {
-    use actix_web::{test, App};
+    use actix_web::{http::StatusCode, test, App};
 
     use super::*;
 
@@ -178,6 +218,19 @@ mod tests {
             .set_payload("this is a value")
             .to_request();
         let resp = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[test]
+    async fn should_generate_next_id() {
+        let mut ids = (0..10).map(|_| get_next_id()).collect::<Vec<_>>();
+        ids.dedup();
+        assert_eq!(ids, vec![0, 10, 20, 30, 40, 50, 60, 70, 80, 90]);
+
+        NODE_ID.store(1, Ordering::Release);
+        PROPOSAL_COUNT.store(0, Ordering::Release);
+        let mut ids = (0..10).map(|_| get_next_id()).collect::<Vec<_>>();
+        ids.dedup();
+        assert_eq!(ids, vec![1, 11, 21, 31, 41, 51, 61, 71, 81, 91]);
     }
 }

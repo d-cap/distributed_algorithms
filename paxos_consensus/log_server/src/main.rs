@@ -1,6 +1,6 @@
 use std::{sync::Mutex, time::Instant};
 
-use actix_web::{error, post, web, App, Error, HttpResponse, HttpServer};
+use actix_web::{error, get, post, web, App, Error, HttpResponse, HttpServer};
 
 use lazy_static::lazy_static;
 
@@ -30,10 +30,19 @@ async fn log(message: web::Payload) -> Result<HttpResponse, Error> {
     ))
 }
 
+#[get("/log")]
+async fn get_logs() -> HttpResponse {
+    if let Ok(logs) = LOGS.lock() {
+        HttpResponse::Ok().json(&logs.iter().map(|(_, v)| v).collect::<Vec<_>>())
+    } else {
+        HttpResponse::Ok().finish()
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("Starting server...");
-    HttpServer::new(|| App::new().service(log))
+    HttpServer::new(|| App::new().service(log).service(get_logs))
         .bind(("0.0.0.0", 8080))?
         .run()
         .await
