@@ -7,12 +7,17 @@ use actix_web::{
 };
 use futures_util::StreamExt as _;
 use lazy_static::lazy_static;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
     static ref LOG_SERVER: RwLock<String> = RwLock::new("invalid-server".to_owned());
     static ref NODE_ROLE: RwLock<Role> = RwLock::new(Role::Learner);
+    static ref PROPOSING_VALUE: RwLock<String> = RwLock::new("".to_owned());
+    static ref CURRENT_VALUE: RwLock<Option<String>> = RwLock::new(None);
+    static ref PAXOS_NODES: RwLock<Vec<String>> = RwLock::new(Vec::new());
     static ref EMPTY_STRING: String = "".to_owned();
+    static ref CLIENT: Client = reqwest::Client::new();
 }
 
 pub type Propose = u64;
@@ -46,9 +51,14 @@ impl TryFrom<String> for Role {
     }
 }
 
-#[get("/consensus/{value}")]
-async fn consensus_start(value: web::Path<String>) -> Result<HttpResponse, Error> {
+#[get("/consensus")]
+async fn consensus_start(mut value: web::Payload) -> Result<HttpResponse, Error> {
     println!("Consensus message start");
+    let mut bytes = web::BytesMut::new();
+    while let Some(item) = value.next().await {
+        bytes.extend_from_slice(&item?);
+    }
+    let value = bytes.escape_ascii().to_string();
     log("Consensus started", &value).await;
     Ok(HttpResponse::Ok().body(format!("Value {value} accepted!")))
 }
@@ -111,6 +121,11 @@ async fn main() -> std::io::Result<()> {
             "internal error",
         ));
     }
+    let paxos_nodes_values = std::env::var("PAXOS_NODES").expect("Paxos nodes are not set");
+    if let Ok(mut paxos_nodes) = PAXOS_NODES.write() {
+        paxos_nodes.extend(paxos_nodes_values.split(',').map(|v| v.to_string()));
+        println!("Paxos nodes: {:?}", paxos_nodes);
+    }
 
     println!("Starting server...");
     HttpServer::new(|| App::new().service(consensus_start))
@@ -125,8 +140,7 @@ async fn log(message: &str, value: &str) {
     } else {
         EMPTY_STRING.clone()
     };
-    let client = reqwest::Client::new();
-    match client
+    match CLIENT
         .post(log_server)
         .body(format!(
             "{}, for node: {:?}, for value: {}",
@@ -147,5 +161,23 @@ async fn log(message: &str, value: &str) {
         Err(e) => {
             println!("Error: {}", e);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{test, App};
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn should_start_consensus_process() {
+        let app = test::init_service(App::new().service(consensus_start)).await;
+        let req = test::TestRequest::post()
+            .uri("/consensus")
+            .set_payload("this is a value")
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
     }
 }

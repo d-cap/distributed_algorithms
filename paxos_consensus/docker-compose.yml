@@ -14,7 +14,7 @@ services:
     environment:
       - PAXOS_ROLE=proposer
       - LOG_SERVER=http://log-server:8080/log
-      - OTHER_NODES=http://consensus-proposer-2:8082,http://consensus-acceptor-1:8083
+      - PAXOS_NODES=http:://consensus-proposer-1:8081,http://consensus-proposer-2:8082,http://consensus-acceptor-1:8083
   consensus-proposer-2:
     build:
       context: ./paxos_server
@@ -24,7 +24,7 @@ services:
     environment:
       - PAXOS_ROLE=proposer
       - LOG_SERVER=http://log-server:8080/log
-      - OTHER_NODES=http://consensus-proposer-1:8081,http://consensus-acceptor-1:8083
+      - PAXOS_NODES=http:://consensus-proposer-1:8081,http://consensus-proposer-2:8082,http://consensus-acceptor-1:8083
   consensus-acceptor-1:
     build:
       context: ./paxos_server
@@ -34,4 +34,4 @@ services:
     environment:
       - PAXOS_ROLE=acceptor
       - LOG_SERVER=http://log-server:8080/log
-      - OTHER_NODES=http://consensus-proposer-1:8081,http://consensus-proposer-2:8082
+      - PAXOS_NODES=http:://consensus-proposer-1:8081,http://consensus-proposer-2:8082,http://consensus-acceptor-1:8083
