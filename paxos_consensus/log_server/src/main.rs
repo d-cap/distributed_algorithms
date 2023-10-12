@@ -9,7 +9,7 @@ lazy_static! {
 }
 
 #[post("/log")]
-async fn greet(message: web::Payload) -> Result<HttpResponse, Error> {
+async fn log(message: web::Payload) -> Result<HttpResponse, Error> {
     println!("Message received");
     if let Ok(bytes) = message.to_bytes().await {
         let m = String::from_utf8(bytes.to_vec());
@@ -33,8 +33,30 @@ async fn greet(message: web::Payload) -> Result<HttpResponse, Error> {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("Starting server...");
-    HttpServer::new(|| App::new().service(greet))
+    HttpServer::new(|| App::new().service(log))
         .bind(("0.0.0.0", 8080))?
         .run()
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{test, App};
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn should_save_message() {
+        let app = test::init_service(App::new().service(log)).await;
+        let body_message = "this is a message".to_string();
+        let req = test::TestRequest::post()
+            .uri("/log")
+            .set_payload(body_message.clone())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+        if let Ok(logs) = LOGS.lock() {
+            assert_eq!(body_message, logs.last().unwrap().1);
+        }
+    }
 }
