@@ -13,5 +13,11 @@ Allows to receive unicast messages when the network is not reliable.
 
 ## Paxos consensus algorithm
 Allows a group of n processes to decide on a value, the current implementation is not production ready in any way.
+### Limitations
+- Paxos roles in this implementation are hierarchical:
+    - Proposer: is an acceptor and a learner as well;
+    - Acceptor: is a learner as well;
+    - Learner: is just a learner.
+- The nodes should start from 1, if 0 is used the first propose will be ignored directly;
 
 > This algorithm is simulated using different processes on the same machine, the roles are decided by the docker compose file
