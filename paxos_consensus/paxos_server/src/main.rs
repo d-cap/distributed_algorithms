@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use actix_web::{post, web, App, Error, HttpResponse, HttpServer};
+use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer};
 use futures::future::join_all;
 use futures_util::StreamExt as _;
 use lazy_static::lazy_static;
@@ -200,26 +200,51 @@ async fn accept(mut value: web::Payload) -> Result<HttpResponse, Error> {
         bytes.extend_from_slice(&item?);
     }
     if let Ok(value) = serde_json::from_slice::<Accept>(&bytes) {
-        log("Acceptor: Trying to accept", value.value).await;
-        if let Ok(mut current_value) = CURRENT_VALUE.write() {
-            *current_value = Some(value.value.to_string());
+        let promised = PROPOSAL_NUMBER_TO_IGNORE.load(Ordering::Acquire);
+        if value.proposal_number < promised {
+            log(
+                "Acceptor: Accept not acceptable already promised higher number",
+                &promised.to_string(),
+            )
+            .await;
+            Ok(HttpResponse::NotAcceptable().finish())
+        } else {
+            log("Acceptor: Trying to accept", value.value).await;
+            let futures = PAXOS_ACCEPTOR_NODES.read().map(|paxos_acceptor_nodes| {
+                paxos_acceptor_nodes
+                    .iter()
+                    .map(|n| {
+                        CLIENT
+                            .post(format!("{}/update_value", n))
+                            .json(&value)
+                            .send()
+                    })
+                    .collect::<Vec<_>>()
+            });
+            let futures = if let Ok(futures) = futures {
+                join_all(futures).await
+            } else {
+                vec![]
+            };
+            for response in futures {
+                match response {
+                    Ok(v) => {
+                        if v.status() == StatusCode::OK {
+                            log("Acceptor: Value updated", "").await;
+                        } else {
+                            log(
+                                "Acceptor: Value updated with error",
+                                &v.status().to_string(),
+                            )
+                            .await;
+                        }
+                    }
+                    Err(e) => log("Acceptor: Error", &e.to_string()).await,
+                }
+            }
+            log("Acceptor: Accepted value", value.value).await;
+            Ok(HttpResponse::Accepted().finish())
         }
-        let futures = PAXOS_ACCEPTOR_NODES.read().map(|paxos_acceptor_nodes| {
-            paxos_acceptor_nodes
-                .iter()
-                .map(|n| {
-                    CLIENT
-                        .post(format!("{}/update_value", n))
-                        .json(&value)
-                        .send()
-                })
-                .collect::<Vec<_>>()
-        });
-        if let Ok(futures) = futures {
-            join_all(futures).await;
-        }
-        log("Acceptor: Accepted value", value.value).await;
-        Ok(HttpResponse::Accepted().finish())
     } else {
         log("Acceptor: Accept value not valid", "").await;
         Ok(HttpResponse::BadRequest().finish())
@@ -233,15 +258,25 @@ async fn update_value(mut value: web::Payload) -> Result<HttpResponse, Error> {
         bytes.extend_from_slice(&item?);
     }
     if let Ok(value) = serde_json::from_slice::<Accept>(&bytes) {
-        log("Learner: Accepted value", value.value).await;
         if let Ok(mut current_value) = CURRENT_VALUE.write() {
             *current_value = Some(value.value.to_string());
         }
         log("Leaner: Accepted value", value.value).await;
-        Ok(HttpResponse::Accepted().finish())
+        Ok(HttpResponse::Ok().finish())
     } else {
         log("Learner: Accept value not valid", "").await;
         Ok(HttpResponse::BadRequest().finish())
+    }
+}
+
+#[get("/value")]
+async fn get_value() -> Result<HttpResponse, Error> {
+    let current_value = CURRENT_VALUE.read().map_or(None, |v| v.clone());
+    if let Some(current_value) = current_value {
+        Ok(HttpResponse::Ok().body(current_value))
+    } else {
+        log("Learner: Get value not possible (value not set)", "").await;
+        Ok(HttpResponse::NotFound().finish())
     }
 }
 
@@ -299,6 +334,8 @@ async fn main() -> std::io::Result<()> {
             .service(consensus_start)
             .service(propose)
             .service(accept)
+            .service(update_value)
+            .service(get_value)
     })
     .bind((
         "0.0.0.0",
@@ -425,7 +462,7 @@ mod tests {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::ACCEPTED);
         mock_update_value.assert();
-        assert_eq!(*CURRENT_VALUE.read().unwrap(), Some("value".to_string()));
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
     }
 
     #[test]

@@ -26,7 +26,7 @@ services:
     environment:
       - PAXOS_ROLE=proposer
       - LOG_SERVER=http://log-server:8080/log
-      - PAXOS_ACCEPTOR_NODES=http://consensus-proposer-1:8081,http://consensus-proposer-1:8082,http://consensus-acceptor-1:8083
+      - PAXOS_ACCEPTOR_NODES=http://consensus-proposer-1:8081,http://consensus-proposer-2:8082,http://consensus-acceptor-1:8083
       - PAXOS_LEARNER_NODES=http://consensus-proposer-1:8081,http://consensus-proposer-2:8082,http://consensus-acceptor-1:8083
       - NODE_ID=2
       - PORT=8082
