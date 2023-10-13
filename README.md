@@ -12,7 +12,7 @@ Allows to receive unicast messages when the network is not reliable.
 > This algorithm is simulated using threads.
 
 ## Paxos consensus algorithm
-Allows a group of n processes to decide on a value, the current implementation is not production ready in any way.
+Allows a group of n processes to decide on a value, the current implementation was developed only to study the algorithm.
 ### Limitations
 - Paxos roles in this implementation are hierarchical:
     - Proposer: is an acceptor and a learner as well;
