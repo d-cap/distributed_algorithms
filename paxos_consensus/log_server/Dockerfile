@@ -4,7 +4,7 @@ WORKDIR /app/log
 
 COPY . /app/log
 
-#RUN cargo test
+RUN cargo test
 RUN cargo build --release
 
 FROM gcr.io/distroless/cc-debian12

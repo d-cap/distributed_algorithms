@@ -4,7 +4,7 @@ WORKDIR /app/consensus
 
 COPY . /app/consensus
 
-#RUN cargo test -- --test-threads=1 
+RUN cargo test -- --test-threads=1
 RUN cargo build --release
 
 FROM gcr.io/distroless/cc-debian12
