@@ -127,6 +127,70 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn should_promise_with_higher_promise() {
+        reset_values();
+        if let Ok(mut node_role) = NODE_ROLE.write() {
+            *node_role = Role::Acceptor;
+        }
+        let app = test::init_service(App::new().service(propose)).await;
+        let req = test::TestRequest::post()
+            .uri("/propose")
+            .set_payload(1483472389.to_string())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+
+        let req = test::TestRequest::post()
+            .uri("/propose")
+            .set_payload(1483472388.to_string())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_ACCEPTABLE);
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+    }
+
+    #[actix_web::test]
+    async fn should_promise_with_accept_with_higher_value() {
+        reset_values();
+        if let Ok(mut node_role) = NODE_ROLE.write() {
+            *node_role = Role::Acceptor;
+        }
+        let mut server = mockito::Server::new();
+        if let Ok(mut paxos_acceptor_nodes) = PAXOS_ACCEPTOR_NODES.write() {
+            paxos_acceptor_nodes.push(server.url());
+        }
+        let mock_update_value = server
+            .mock("POST", "/update_value")
+            .with_status(StatusCode::OK.as_u16() as usize)
+            .create();
+        let app = test::init_service(App::new().service(propose).service(accept)).await;
+        let req = test::TestRequest::post()
+            .uri("/propose")
+            .set_payload(1483472389.to_string())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+        let req = test::TestRequest::post()
+            .uri("/accept")
+            .set_payload(serde_json::to_string(&Accept::new(1483472389, "value")).unwrap())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        mock_update_value.assert();
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+
+        let req = test::TestRequest::post()
+            .uri("/propose")
+            .set_payload(1483472388.to_string())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_ACCEPTABLE);
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+    }
+
+    #[actix_web::test]
     async fn should_accept_value() {
         reset_values();
         if let Ok(mut node_role) = NODE_ROLE.write() {
@@ -148,6 +212,72 @@ mod tests {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::ACCEPTED);
         mock_update_value.assert();
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+    }
+
+    #[actix_web::test]
+    async fn should_promise_and_accept_value() {
+        reset_values();
+        if let Ok(mut node_role) = NODE_ROLE.write() {
+            *node_role = Role::Acceptor;
+        }
+        let app = test::init_service(App::new().service(propose).service(accept)).await;
+        let req = test::TestRequest::post()
+            .uri("/propose")
+            .set_payload(1483472389.to_string())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+
+        let mut server = mockito::Server::new();
+        if let Ok(mut paxos_acceptor_nodes) = PAXOS_ACCEPTOR_NODES.write() {
+            paxos_acceptor_nodes.push(server.url());
+        }
+        let mock_update_value = server
+            .mock("POST", "/update_value")
+            .with_status(StatusCode::OK.as_u16() as usize)
+            .create();
+        let req = test::TestRequest::post()
+            .uri("/accept")
+            .set_payload(serde_json::to_string(&Accept::new(1483472389, "value")).unwrap())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        mock_update_value.assert();
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+    }
+
+    #[actix_web::test]
+    async fn should_not_accept_with_higher_promise() {
+        reset_values();
+        if let Ok(mut node_role) = NODE_ROLE.write() {
+            *node_role = Role::Acceptor;
+        }
+        let app = test::init_service(App::new().service(propose).service(accept)).await;
+        let req = test::TestRequest::post()
+            .uri("/propose")
+            .set_payload(1483472389.to_string())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+
+        let mut server = mockito::Server::new();
+        if let Ok(mut paxos_acceptor_nodes) = PAXOS_ACCEPTOR_NODES.write() {
+            paxos_acceptor_nodes.push(server.url());
+        }
+        let mock_update_value = server
+            .mock("POST", "/update_value")
+            .with_status(StatusCode::OK.as_u16() as usize)
+            .create();
+        let req = test::TestRequest::post()
+            .uri("/accept")
+            .set_payload(serde_json::to_string(&Accept::new(1483472388, "value")).unwrap())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_ACCEPTABLE);
+        mock_update_value.expect_at_most(0);
         assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
     }
 }
