@@ -22,4 +22,6 @@ version = "^0"
 features = ["json"]
 
 [dev-dependencies]
+actix-test = "0.1.2"
 mockito = "1.2.0"
+tokio = "1.33.0"

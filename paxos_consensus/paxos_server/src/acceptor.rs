@@ -105,4 +105,49 @@ async fn accept(mut value: web::Payload) -> Result<HttpResponse, Error> {
 #[cfg(test)]
 mod tests {
     use actix_web::{http::StatusCode, test, App};
+
+    use crate::{tests::reset_values, Role, CURRENT_VALUE, NODE_ROLE};
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn should_promise_for_value() {
+        reset_values();
+        if let Ok(mut node_role) = NODE_ROLE.write() {
+            *node_role = Role::Acceptor;
+        }
+        let app = test::init_service(App::new().service(propose)).await;
+        let req = test::TestRequest::post()
+            .uri("/propose")
+            .set_payload(1483472389.to_string())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+    }
+
+    #[actix_web::test]
+    async fn should_accept_value() {
+        reset_values();
+        if let Ok(mut node_role) = NODE_ROLE.write() {
+            *node_role = Role::Acceptor;
+        }
+        let mut server = mockito::Server::new();
+        if let Ok(mut paxos_acceptor_nodes) = PAXOS_ACCEPTOR_NODES.write() {
+            paxos_acceptor_nodes.push(server.url());
+        }
+        let mock_update_value = server
+            .mock("POST", "/update_value")
+            .with_status(StatusCode::OK.as_u16() as usize)
+            .create();
+        let app = test::init_service(App::new().service(accept)).await;
+        let req = test::TestRequest::post()
+            .uri("/accept")
+            .set_payload(serde_json::to_string(&Accept::new(1001, "value")).unwrap())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        mock_update_value.assert();
+        assert_eq!(*CURRENT_VALUE.read().unwrap(), None);
+    }
 }
