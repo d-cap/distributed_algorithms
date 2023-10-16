@@ -1,0 +1,12 @@
+[lib]
+path = 'src/lib.rs'
+
+[package]
+name = "vector_clocks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[dev-dependencies]
+more-asserts = "0.3.1"
