@@ -21,22 +21,23 @@ impl Child {
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Node {
-    hash: u64,
-    left: Child,
-    right: Child,
+    pub hash: u64,
+    pub left: Child,
+    pub right: Child,
 }
 
 #[derive(PartialEq, Debug)]
 pub struct Value<K, V> {
-    key: K,
-    value: V,
+    pub key: K,
+    pub value: V,
 }
 
 /// A Hash tree implemented with an arena allocated binary tree
 #[derive(Default)]
 pub struct MerkleTree<K, V> {
-    hashes: Vec<Node>,
-    data: Vec<Value<K, V>>,
+    pub hashes: Vec<Node>,
+    pub data: Vec<Value<K, V>>,
+    pub root: usize,
 }
 
 impl<K, V> MerkleTree<K, V>
@@ -47,6 +48,7 @@ where
         Self {
             hashes: vec![],
             data: vec![],
+            root: 0,
         }
     }
 
@@ -96,6 +98,7 @@ where
         }
 
         self.data.insert(position, Value { key, value });
+        self.root = highest_power_of_2(self.hashes.len()) as usize - 1;
     }
 
     fn left_node_index(position: usize) -> usize {
@@ -540,6 +543,33 @@ mod tests {
             value: "test",
         }];
         assert_eq!(search_index(&data, &1), 1);
+    }
+
+    #[test]
+    fn should_calculate_root_position() {
+        let mut tree = MerkleTree::new();
+        tree.insert(0, "value 0");
+        assert_eq!(tree.root, 0);
+        tree.insert(1, "value 1");
+        tree.insert(2, "value 2");
+        assert_eq!(tree.root, 1);
+        tree.insert(3, "value 3");
+        tree.insert(4, "value 4");
+        assert_eq!(tree.root, 3);
+        tree.insert(5, "value 5");
+        tree.insert(6, "value 6");
+        tree.insert(7, "value 7");
+        tree.insert(8, "value 8");
+        assert_eq!(tree.root, 7);
+        tree.insert(9, "value 9");
+        tree.insert(10, "value 10");
+        tree.insert(11, "value 11");
+        tree.insert(12, "value 12");
+        tree.insert(13, "value 13");
+        tree.insert(14, "value 14");
+        tree.insert(15, "value 15");
+        tree.insert(16, "value 16");
+        assert_eq!(tree.root, 15);
     }
 
     #[derive(Clone, PartialEq, Eq, Hash, Debug)]
