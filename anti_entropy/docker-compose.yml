@@ -1,0 +1,24 @@
+services:
+  log-server:
+    build:
+      context: ./log_server
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+  anti-entropy-1:
+    image: anti_entropy
+    build:
+      context: ./anti_entropy_server
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      - LOG_SERVER=http://log-server:8080/log
+      - ANSWER_NODE=http://anti-entropy-2:8080/ask
+  anti-entropy-2:
+    image: anti_entropy
+    ports:
+      - "8082:8080"
+    environment:
+      - ROLE=answerer
+      - LOG_SERVER=http://log-server:8080/log
