@@ -2,9 +2,10 @@ FROM rust:bookworm as builder
 
 WORKDIR /app/anti-entropy
 
-COPY . /app/anti-entropy
+COPY anti_entropy_server /app/anti-entropy
+COPY merkle_tree /app/merkle_tree
 
-RUN cargo test -- --test-threads=1
+RUN cargo test
 RUN cargo build --release
 
 FROM gcr.io/distroless/cc-debian12

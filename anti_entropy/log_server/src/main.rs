@@ -41,7 +41,7 @@ async fn get_logs() -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("Starting server...");
+    println!("Starting log server...");
     HttpServer::new(|| App::new().service(log).service(get_logs))
         .bind(("0.0.0.0", 8080))?
         .run()

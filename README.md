@@ -17,7 +17,7 @@ Allows to receive unicast messages when the network is not reliable.
 
 > This algorithm is simulated using threads.
 
-## Paxos consensus algorithm
+## Paxos Consensus Algorithm
 
 Allows a group of n processes to decide on a value, the current implementation was developed only to study the algorithm.
 
@@ -41,3 +41,8 @@ Because the data structure will be used to test how two servers can understand w
 
 - No deletion function is provided;
 - Inserts must be in order to correctly have the hashes calculated. To allow this more complex code has to be developed and considering the goal of the current implementation is to test the data the functionality is not needed.
+- Cannot detect which of left or right leaf is the different one, it has to check both with the real data
+
+## Anti-entropy Algorithm
+
+Allows communicating with another node to verify which data is missing or different in the other node. This is based of the Merkle tree implemented in this project so it has the same limitations.

@@ -1,0 +1,7 @@
+target
+*/target
+lib/res/tiles
+Dockerfile
+.dockerignore
+.git
+.gitignore

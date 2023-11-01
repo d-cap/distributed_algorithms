@@ -312,6 +312,7 @@ dependencies = [
  "gethostname",
  "lazy_static",
  "merkle_tree",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",
